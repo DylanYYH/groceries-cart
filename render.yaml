@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: brightcart
+    runtime: python
+    buildCommand: "python -m compileall ."
+    startCommand: "python main.py"
+    healthCheckPath: "/health"
+    envVars:
+      - key: APP_ENV
+        value: production

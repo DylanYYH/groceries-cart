@@ -13,6 +13,10 @@ entire flow works immediately:
 from __future__ import annotations
 
 import html
+import hashlib
+import hmac
+import json
+import os
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -23,8 +27,8 @@ from data_sources import mock_deals, mock_geocode_location, mock_nearby_stores
 from scoring import ScoringConfig, broaden_query, infer_family, rank_deals_with_fallback
 
 
-HOST = "127.0.0.1"
-PORT = 8765
+HOST = os.environ.get("HOST", "127.0.0.1")
+PORT = int(os.environ.get("PORT", "8765"))
 SESSION_COOKIE_NAME = "brightcart_session"
 
 SESSION_STORE: dict[str, dict[str, object]] = {}
@@ -59,6 +63,23 @@ def pct(value: float) -> str:
 
 def escape(value: object) -> str:
     return html.escape("" if value is None else str(value))
+
+
+def password_digest(password: str) -> str:
+    salt = os.urandom(16)
+    digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1)
+    return f"{salt.hex()}${digest.hex()}"
+
+
+def password_matches(password: str, stored: str) -> bool:
+    try:
+        salt_hex, digest_hex = stored.split("$", 1)
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(digest_hex)
+        actual = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1)
+        return hmac.compare_digest(actual, expected)
+    except (ValueError, TypeError):
+        return False
 
 
 def parse_cookie_value(cookie_header: str | None) -> str | None:
@@ -114,7 +135,8 @@ def send_html(handler: BaseHTTPRequestHandler, body: str, status: int = 200, coo
     handler.send_header("Content-Type", "text/html; charset=utf-8")
     handler.send_header("Content-Length", str(len(payload)))
     if cookie_value:
-        handler.send_header("Set-Cookie", f"{SESSION_COOKIE_NAME}={cookie_value}; Path=/; HttpOnly")
+        secure = "; Secure" if os.environ.get("APP_ENV") == "production" else ""
+        handler.send_header("Set-Cookie", f"{SESSION_COOKIE_NAME}={cookie_value}; Path=/; HttpOnly; SameSite=Lax{secure}")
     if location:
         handler.send_header("Location", location)
     handler.end_headers()
@@ -124,7 +146,8 @@ def send_html(handler: BaseHTTPRequestHandler, body: str, status: int = 200, coo
 def redirect(handler: BaseHTTPRequestHandler, location: str, cookie_value: str | None = None) -> None:
     handler.send_response(303)
     if cookie_value:
-        handler.send_header("Set-Cookie", f"{SESSION_COOKIE_NAME}={cookie_value}; Path=/; HttpOnly")
+        secure = "; Secure" if os.environ.get("APP_ENV") == "production" else ""
+        handler.send_header("Set-Cookie", f"{SESSION_COOKIE_NAME}={cookie_value}; Path=/; HttpOnly; SameSite=Lax{secure}")
     handler.send_header("Location", location)
     handler.end_headers()
 
@@ -179,6 +202,7 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{escape(title)}</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <style>
     :root {{
       --bg: #f3f8fb;
@@ -584,6 +608,20 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       border: 1px dashed rgba(104, 149, 189, 0.24);
       color: var(--muted);
     }}
+    .map-panel {{
+      min-height: 340px;
+      overflow: hidden;
+      border-radius: 20px;
+      border: 1px solid rgba(104, 149, 189, 0.16);
+      background: #dfeef5;
+      margin: 18px 0;
+    }}
+    #store-map {{ min-height: 340px; width: 100%; }}
+    .map-attribution {{
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }}
     .summary-card {{
       padding: 16px;
       border-radius: 18px;
@@ -635,6 +673,45 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       </aside>
     </div>
   </div>
+  <script>
+    function useBrowserLocation() {{
+      if (!navigator.geolocation) {{
+        alert("Location is not available in this browser. Enter a postal code or city instead.");
+        return;
+      }}
+      navigator.geolocation.getCurrentPosition(function(position) {{
+        const form = document.createElement("form");
+        form.method = "post";
+        form.action = "/location";
+        [["location", "My current location"], ["lat", position.coords.latitude], ["lng", position.coords.longitude], ["proximity", "nearby"]].forEach(function(pair) {{
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = pair[0];
+          input.value = pair[1];
+          form.appendChild(input);
+        }});
+        document.body.appendChild(form);
+        form.submit();
+      }}, function() {{
+        alert("We could not access your location. Enter a postal code or city instead.");
+      }}, {{ enableHighAccuracy: false, maximumAge: 300000, timeout: 10000 }});
+    }}
+
+    const mapData = window.BRIGHTCART_MAP_DATA;
+    if (mapData && document.getElementById("store-map")) {{
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.onload = function() {{
+        const map = L.map("store-map").setView([mapData.lat, mapData.lng], 11);
+        L.tileLayer("https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png", {{ maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }}).addTo(map);
+        L.marker([mapData.lat, mapData.lng]).addTo(map).bindPopup("Your selected location");
+        mapData.stores.forEach(function(store) {{
+          L.marker([store.lat, store.lng]).addTo(map).bindPopup("<strong>" + store.name + "</strong><br>" + store.address + "<br>" + store.distance_km.toFixed(1) + " km");
+        }});
+      }};
+      document.head.appendChild(script);
+    }}
+  </script>
 </body>
 </html>"""
 
@@ -719,6 +796,7 @@ def render_search_controls(session: dict[str, object], error: str | None = None)
         </div>
         <div class="actions">
           <button class="btn btn-primary" type="submit">Update location</button>
+          <button class="btn btn-secondary" type="button" onclick="useBrowserLocation()">Use my location</button>
         </div>
       </form>
     """
@@ -878,6 +956,9 @@ def render_search_main(session: dict[str, object], context: dict[str, object], q
           <span>Search radius up to {proximity["radius"]:.0f} km</span>
         </div>
       </div>
+      <div class="map-panel"><div id="store-map" aria-label="Map of nearby grocery stores"></div></div>
+      <p class="map-attribution">Map data © OpenStreetMap contributors. Location is used only for this search session.</p>
+      <script>window.BRIGHTCART_MAP_DATA = {json.dumps({"lat": float(session["lat"]), "lng": float(session["lng"]), "stores": [{"name": store.name, "address": store.address, "lat": store.lat, "lng": store.lng, "distance_km": store.distance_km or 0.0} for store in context["stores"][:12]]})};</script>
       <div class="results" style="margin-top:18px;">
         {results_html}
       </div>
@@ -915,6 +996,9 @@ def render_search_page(session: dict[str, object], query: str) -> str:
 class GroceryHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/health":
+            send_html(self, '{"status":"ok"}', status=200)
+            return
         if parsed.path in {"", "/"}:
             session_id, session = get_session(self)
             if not session or not session.get("authenticated"):
@@ -958,7 +1042,7 @@ class GroceryHandler(BaseHTTPRequestHandler):
                 send_html(self, render_register_page("That email already exists. Use sign in instead."))
                 return
 
-            USER_STORE[email] = password
+            USER_STORE[email] = password_digest(password)
             session["authenticated"] = True
             session["email"] = email
             redirect(self, "/search", cookie_value=session_id)
@@ -975,7 +1059,7 @@ class GroceryHandler(BaseHTTPRequestHandler):
             if stored_password is None:
                 send_html(self, render_register_page("No account found for that email."))
                 return
-            if stored_password != password:
+            if not password_matches(password, stored_password):
                 send_html(self, render_register_page("Incorrect password."))
                 return
 
@@ -997,7 +1081,14 @@ class GroceryHandler(BaseHTTPRequestHandler):
             if proximity_key not in PROXIMITY_OPTIONS:
                 proximity_key = "nearby"
 
-            lat, lng, label = mock_geocode_location(location_text)
+            try:
+                lat = float(form["lat"])
+                lng = float(form["lng"])
+                if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                    raise ValueError
+                label = "Current browser location"
+            except (KeyError, TypeError, ValueError):
+                lat, lng, label = mock_geocode_location(location_text)
             session["location_text"] = location_text
             session["lat"] = lat
             session["lng"] = lng

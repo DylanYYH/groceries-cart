@@ -2,13 +2,40 @@
 
 Local Richmond Hill and GTA grocery deal finder with a register-or-sign-in flow.
 
-## Run it
+## Run it locally
 
 ```bash
 python3 main.py
 ```
 
 Open `http://127.0.0.1:8765/`.
+
+The server reads `HOST` and `PORT` from the environment. Render supplies `PORT`
+automatically, so the same command works locally and in production.
+
+## Deploy on Render
+
+This repository is a Python server with a custom HTTP handler, so Render is the
+recommended host. Create a new Web Service from this repository, or use the
+included `render.yaml`. Render will use the included build, start, and health
+check settings. The free service may sleep after inactivity.
+
+User accounts and sessions are still in-memory demo data and reset whenever the
+service restarts; do not use this authentication flow for real users.
+
+## Location map
+
+The search page includes a Leaflet map using OpenStreetMap tiles. Users can
+enter a city/postal code or grant browser location permission. OpenStreetMap
+attribution is displayed in the UI. The included store and deal data remains
+mock data until a compliant retailer feed or approved data source is connected.
+
+## Vercel note
+
+Vercel is not the right deployment target for this repository in its current
+form because it runs a long-lived Python `HTTPServer`. If the UI is later split
+into a React/Vite or Next.js frontend with API routes, the frontend can move to
+Vercel while this Python service remains on Render.
 
 ## Flow
 
