@@ -192,19 +192,16 @@ def build_context(query: str, session: dict[str, object]) -> dict[str, object]:
 
 
 def render_progress(active: str) -> str:
-    if active == "auth":
-        return '<a class="step active step-link" href="/search">Browse as guest &rarr;</a>'
-    return '<span class="step active">Search nearby</span>'
+    return ""
 
 
 def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str) -> str:
-    hero_title = "Find better grocery prices nearby." if active_step == "search" else "Find grocery deals without the fuss."
-    hero_copy = (
-        "Search an item, choose your area, and compare nearby prices in seconds. "
-        "You can browse as a guest and use your location when you are ready."
-        if active_step == "search"
-        else "Start with a quick search, then optionally save a local demo account for the next visit."
-    )
+    hero_title = "Compare grocery prices near you."
+    hero_copy = "Search an item and see nearby store prices, distances, and savings in one place."
+    sidebar_block = f'<aside class="panel">{sidebar_html}</aside>' if sidebar_html.strip() else ""
+    layout_class = "layout single" if not sidebar_html.strip() else "layout"
+    hero_class = "hero compact" if not sidebar_html.strip() else "hero"
+    progress_html = render_progress(active_step)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -252,7 +249,21 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       box-shadow: var(--shadow);
       padding: 28px;
       margin-bottom: 18px;
+      text-align: center;
     }}
+    .hero.compact {{
+      max-width: 980px;
+      margin-left: auto;
+      margin-right: auto;
+      padding: 24px 28px;
+      text-align: left;
+    }}
+    .hero.compact h1 {{
+      max-width: none;
+      font-size: clamp(30px, 4vw, 46px);
+      line-height: 1.08;
+    }}
+    .hero.compact p {{ margin-left: 0; margin-right: 0; max-width: 760px; }}
     .eyebrow {{
       display: inline-flex;
       align-items: center;
@@ -269,11 +280,15 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       font-size: clamp(32px, 5vw, 58px);
       line-height: 1.02;
       letter-spacing: -0.04em;
-      max-width: 24ch;
+      max-width: 900px;
+      margin-left: auto;
+      margin-right: auto;
     }}
     .hero p {{
       margin: 14px 0 0;
       max-width: 760px;
+      margin-left: auto;
+      margin-right: auto;
       color: var(--muted);
       font-size: 17px;
       line-height: 1.65;
@@ -283,6 +298,7 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       flex-wrap: wrap;
       gap: 10px;
       margin-top: 20px;
+      justify-content: center;
     }}
     .step {{
       display: inline-flex;
@@ -314,6 +330,7 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       align-items: start;
     }}
     .layout > aside {{ position: sticky; top: 18px; }}
+    .layout.single {{ grid-template-columns: minmax(0, 1fr); max-width: 980px; margin: 0 auto; }}
     .panel {{
       background: var(--card);
       backdrop-filter: blur(14px);
@@ -369,6 +386,8 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
     .demo-credentials strong, .demo-credentials span {{ display: block; }}
     .demo-credentials span {{ margin-top: 4px; font-size: 13px; }}
     .demo-credentials code {{ font-weight: 800; color: #1c6654; }}
+    .demo-inline {{ margin-top: 12px; padding: 10px 12px; }}
+    .demo-inline .btn {{ padding: 10px 12px; font-size: 13px; }}
     .field {{
       display: grid;
       gap: 8px;
@@ -696,21 +715,16 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
 </head>
 <body>
   <div class="wrap">
-    <section class="hero">
-      <div class="eyebrow">BrightCart Richmond Hill + GTA</div>
+    <section class="{hero_class}">
       <h1>{escape(hero_title)}</h1>
       <p>{escape(hero_copy)}</p>
-      <div class="steps">
-        {render_progress(active_step)}
-      </div>
+      {f'<div class="steps">{progress_html}</div>' if progress_html else ''}
     </section>
-    <div class="layout">
+    <div class="{layout_class}">
       <section class="panel">
         {main_html}
       </section>
-      <aside class="panel">
-        {sidebar_html}
-      </aside>
+      {sidebar_block}
     </div>
   </div>
   <script>
@@ -770,15 +784,7 @@ def render_auth_main(error: str | None = None) -> str:
     error_html = f'<div class="error">{escape(error)}</div>' if error else ""
     return f"""
       <h2>Register or sign in</h2>
-      <p class="sub">Use your email and password to create a local account or return to an existing one.</p>
       {error_html}
-      <div class="demo-credentials">
-        <div>
-          <strong>Demo account</strong>
-          <span>Username: <code>demo</code> &nbsp; Password: <code>smartcart</code></span>
-        </div>
-        <button class="btn btn-secondary" type="button" onclick="fillDemoCredentials()">Fill demo credentials</button>
-      </div>
       <div class="auth-grid">
         <form method="post" action="/register" class="auth-card">
           <h3>Create account</h3>
@@ -807,28 +813,20 @@ def render_auth_main(error: str | None = None) -> str:
           <div class="actions">
             <button class="btn btn-primary" type="submit">Sign in</button>
           </div>
+          <div class="demo-credentials demo-inline">
+            <div>
+              <strong>Demo account</strong>
+              <span>Username: <code>demo</code> &nbsp; Password: <code>smartcart</code></span>
+            </div>
+            <button class="btn btn-secondary" type="button" onclick="fillDemoCredentials()">Fill credentials</button>
+          </div>
         </form>
-      </div>
-      <div class="actions" style="justify-content:center; margin-top:18px;">
-        <a class="btn btn-secondary" href="/search">Continue without an account</a>
       </div>
     """
 
 
 def render_auth_sidebar() -> str:
-    return """
-      <div class="summary-card">
-        <strong>What happens next</strong>
-        <p>After you authenticate, you go straight to the search page and can browse ranked grocery deals immediately.</p>
-      </div>
-      <div class="summary-card">
-        <strong>Location stays available</strong>
-        <p>If you want more accurate ranking, you can update your location and radius from the search page instead of a separate setup step.</p>
-      </div>
-      <p class="footer-note">
-        This is a local prototype. Authentication and user records are stored in memory only.
-      </p>
-    """
+    return ""
 
 
 def render_search_controls(session: dict[str, object], error: str | None = None) -> str:
