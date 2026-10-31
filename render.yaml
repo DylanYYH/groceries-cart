@@ -2,9 +2,11 @@ services:
   - type: web
     name: smartcart
     runtime: python
-    buildCommand: "python -m compileall ."
+    buildCommand: "python -m compileall main.py data_sources.py models.py scoring.py"
     startCommand: "python main.py"
     healthCheckPath: "/health"
     envVars:
       - key: APP_ENV
         value: production
+      - key: HOST
+        value: 0.0.0.0

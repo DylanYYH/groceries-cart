@@ -27,7 +27,9 @@ from data_sources import mock_deals, mock_geocode_location, mock_nearby_stores
 from scoring import ScoringConfig, broaden_query, infer_family, rank_deals_with_fallback
 
 
-HOST = os.environ.get("HOST", "127.0.0.1")
+HOST = os.environ.get("HOST") or (
+    "0.0.0.0" if os.environ.get("APP_ENV") == "production" else "127.0.0.1"
+)
 PORT = int(os.environ.get("PORT", "8765"))
 SESSION_COOKIE_NAME = "brightcart_session"
 DEMO_USERNAME = "demo"
@@ -1169,10 +1171,11 @@ def main() -> None:
     url = f"http://{HOST}:{PORT}/"
     print(f"Serving BrightCart on {url}")
     print("Register or sign in first, then search items like: butter, milk, chicken breast, apples")
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
+    if os.environ.get("APP_ENV") != "production":
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -11,7 +11,7 @@ python3 main.py
 Open `http://127.0.0.1:8765/`.
 
 The server reads `HOST` and `PORT` from the environment. Render supplies `PORT`
-automatically, so the same command works locally and in production.
+automatically, and production binds to `0.0.0.0` so Render can route traffic to it.
 
 ## Deploy on Render
 
