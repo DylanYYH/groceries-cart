@@ -192,8 +192,9 @@ def build_context(query: str, session: dict[str, object]) -> dict[str, object]:
 
 
 def render_progress(active: str) -> str:
-    label = "Ready to search" if active == "search" else "Optional account"
-    return f'<span class="step active">{escape(label)}</span>'
+    if active == "auth":
+        return '<a class="step active step-link" href="/search">Browse as guest &rarr;</a>'
+    return '<span class="step active">Search nearby</span>'
 
 
 def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str) -> str:
@@ -268,7 +269,7 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       font-size: clamp(32px, 5vw, 58px);
       line-height: 1.02;
       letter-spacing: -0.04em;
-      max-width: 12ch;
+      max-width: 24ch;
     }}
     .hero p {{
       margin: 14px 0 0;
@@ -299,6 +300,8 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       color: white;
       border-color: transparent;
     }}
+    .step-link {{ text-decoration: none; cursor: pointer; }}
+    .step-link:hover {{ filter: brightness(1.06); transform: translateY(-1px); }}
     .step.done {{
       background: rgba(153,226,209,0.24);
       color: #1c6654;
@@ -806,6 +809,9 @@ def render_auth_main(error: str | None = None) -> str:
           </div>
         </form>
       </div>
+      <div class="actions" style="justify-content:center; margin-top:18px;">
+        <a class="btn btn-secondary" href="/search">Continue without an account</a>
+      </div>
     """
 
 
@@ -1068,7 +1074,7 @@ class GroceryHandler(BaseHTTPRequestHandler):
             send_html(self, '{"status":"ok"}', status=200)
             return
         if parsed.path in {"", "/"}:
-            redirect(self, "/search")
+            redirect(self, "/auth")
             return
 
         session_id, session = get_session(self)
