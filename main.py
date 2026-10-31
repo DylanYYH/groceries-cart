@@ -281,6 +281,14 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
     .hero-mark svg {{ width: 30px; height: 30px; }}
     .hero-heading {{ display: flex; align-items: center; gap: 16px; }}
     .hero-heading h1 {{ margin: 0; max-width: none; }}
+    .app-name {{
+      margin: 0 0 10px;
+      color: var(--primary);
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }}
     .eyebrow {{
       display: inline-flex;
       align-items: center;
@@ -733,6 +741,7 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
 <body>
   <div class="wrap">
     <section class="{hero_class}">
+      <div class="app-name">Smart Cart</div>
       <div class="hero-heading">
         <div class="hero-mark" aria-hidden="true">
           <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
