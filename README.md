@@ -1,4 +1,4 @@
-# BrightCart / Grocery Deal Finder
+# Grocery Scout / Grocery Deal Finder
 
 Local Richmond Hill and GTA grocery deal finder with a register-or-sign-in flow.
 

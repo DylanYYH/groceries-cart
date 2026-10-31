@@ -31,7 +31,7 @@ HOST = os.environ.get("HOST") or (
     "0.0.0.0" if os.environ.get("APP_ENV") == "production" else "127.0.0.1"
 )
 PORT = int(os.environ.get("PORT", "8765"))
-SESSION_COOKIE_NAME = "brightcart_session"
+SESSION_COOKIE_NAME = "groceryscout_session"
 DEMO_USERNAME = "demo"
 DEMO_PASSWORD = "smartcart"
 
@@ -741,7 +741,7 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
 <body>
   <div class="wrap">
     <section class="{hero_class}">
-      <div class="app-name">Smart Cart</div>
+      <div class="app-name">Grocery Scout</div>
       <div class="hero-heading">
         <div class="hero-mark" aria-hidden="true">
           <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1089,11 +1089,11 @@ def render_search_main(session: dict[str, object], context: dict[str, object], q
         Match family: {escape(context["query_family"] or "general")}
       </p>
     """
-    return render_shell("BrightCart | Grocery deal finder", "search", main_html, sidebar_html)
+    return render_shell("Grocery Scout | Grocery deal finder", "search", main_html, sidebar_html)
 
 
 def render_register_page(error: str | None = None) -> str:
-    return render_shell("BrightCart | Register or sign in", "auth", render_auth_main(error), render_auth_sidebar())
+    return render_shell("Grocery Scout | Register or sign in", "auth", render_auth_main(error), render_auth_sidebar())
 
 
 def render_search_page(session: dict[str, object], query: str) -> str:
@@ -1209,7 +1209,7 @@ class GroceryHandler(BaseHTTPRequestHandler):
 def main() -> None:
     server = HTTPServer((HOST, PORT), GroceryHandler)
     url = f"http://{HOST}:{PORT}/"
-    print(f"Serving BrightCart on {url}")
+    print(f"Serving Grocery Scout on {url}")
     print("Register or sign in first, then search items like: butter, milk, chicken breast, apples")
     if os.environ.get("APP_ENV") != "production":
         try:
