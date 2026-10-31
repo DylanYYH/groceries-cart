@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: brightcart
+    name: smartcart
     runtime: python
     buildCommand: "python -m compileall ."
     startCommand: "python main.py"
