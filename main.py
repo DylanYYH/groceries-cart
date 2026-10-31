@@ -264,6 +264,23 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       line-height: 1.08;
     }}
     .hero.compact p {{ margin-left: 0; margin-right: 0; max-width: 760px; }}
+    .hero:not(.compact) {{ text-align: left; }}
+    .hero:not(.compact) h1, .hero:not(.compact) p {{ margin-left: 0; margin-right: 0; }}
+    .hero:not(.compact) .steps {{ justify-content: flex-start; }}
+    .hero-mark {{
+      display: inline-grid;
+      place-items: center;
+      width: 52px;
+      height: 52px;
+      flex: 0 0 52px;
+      border-radius: 16px;
+      color: #ffffff;
+      background: linear-gradient(135deg, var(--primary), var(--primary-2));
+      box-shadow: 0 10px 22px rgba(53, 107, 154, 0.20);
+    }}
+    .hero-mark svg {{ width: 30px; height: 30px; }}
+    .hero-heading {{ display: flex; align-items: center; gap: 16px; }}
+    .hero-heading h1 {{ margin: 0; max-width: none; }}
     .eyebrow {{
       display: inline-flex;
       align-items: center;
@@ -716,7 +733,17 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
 <body>
   <div class="wrap">
     <section class="{hero_class}">
-      <h1>{escape(hero_title)}</h1>
+      <div class="hero-heading">
+        <div class="hero-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 14H17L22 40H50L56 22H20" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="27" cy="51" r="4" fill="currentColor"/>
+            <circle cx="47" cy="51" r="4" fill="currentColor"/>
+            <path d="M29 30H48" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h1>{escape(hero_title)}</h1>
+      </div>
       <p>{escape(hero_copy)}</p>
       {f'<div class="steps">{progress_html}</div>' if progress_html else ''}
     </section>
