@@ -201,4 +201,79 @@ def mock_deals(stores: list[Store]) -> list[Deal]:
         Deal(store_lookup["Walmart Supercentre RH"], "Tofu Firm 400g", 2.99, 3.79),
         Deal(store_lookup["Longo's Aurora"], "Atlantic Salmon Fillet 500g", 10.99, 14.99),
     ]
+
+    # Expanded demo catalog.  The names intentionally include common search
+    # synonyms so the scoring engine can compare realistic alternatives without
+    # falling back to unrelated products.
+    deals.extend([
+        # Eggs, yogurt, cheese, and other dairy
+        Deal(store_lookup["No Frills Yonge & 16th"], "Large White Eggs 12 Count", 3.99, 4.99),
+        Deal(store_lookup["FreshCo Elgin Mills"], "Free Run Brown Eggs 12 Count", 4.49, 5.49),
+        Deal(store_lookup["Food Basics Major Mack"], "Large White Eggs 18 Count", 5.49, 6.99),
+        Deal(store_lookup["Metro Bathurst & Major Mack"], "Greek Yogurt Plain 750g", 4.99, 6.49),
+        Deal(store_lookup["Walmart Supercentre RH"], "Activia Yogurt 650g", 3.97, 4.97),
+        Deal(store_lookup["No Frills Yonge & 16th"], "Cheddar Cheese 400g", 4.99, 6.49),
+        Deal(store_lookup["FreshCo Elgin Mills"], "Mozzarella Cheese 400g", 5.49, 7.49),
+        Deal(store_lookup["Food Basics Major Mack"], "Sour Cream 500ml", 2.99, 3.79),
+
+        # Meat, seafood, and plant protein
+        Deal(store_lookup["No Frills Yonge & 16th"], "Extra Lean Ground Beef 1kg", 9.99, 12.99),
+        Deal(store_lookup["FreshCo Elgin Mills"], "Pork Tenderloin 600g", 7.99, 10.49),
+        Deal(store_lookup["Food Basics Major Mack"], "Chicken Drumsticks 1kg", 5.99, 7.99),
+        Deal(store_lookup["Metro Bathurst & Major Mack"], "Bacon 375g", 4.99, 6.99),
+        Deal(store_lookup["Walmart Supercentre RH"], "Frozen Shrimp 400g", 7.97, 9.97),
+        Deal(store_lookup["No Frills Yonge & 16th"], "Extra Firm Tofu 454g", 2.49, 3.49),
+
+        # Bread, grains, and bakery
+        Deal(store_lookup["FreshCo Elgin Mills"], "White Bread 675g", 2.49, 3.49),
+        Deal(store_lookup["Food Basics Major Mack"], "Whole Wheat Bread 675g", 2.79, 3.79),
+        Deal(store_lookup["No Frills Yonge & 16th"], "Hamburger Buns 8 Pack", 2.49, 3.49),
+        Deal(store_lookup["Walmart Supercentre RH"], "Tortilla Wraps 10 Pack", 3.47, 4.47),
+        Deal(store_lookup["Metro Bathurst & Major Mack"], "White Rice 2kg", 5.99, 7.49),
+        Deal(store_lookup["Food Basics Major Mack"], "Spaghetti Pasta 900g", 1.99, 2.79),
+        Deal(store_lookup["FreshCo Elgin Mills"], "All Purpose Flour 2.5kg", 4.49, 5.49),
+        Deal(store_lookup["No Frills Yonge & 16th"], "Quick Oats 1kg", 3.49, 4.49),
+
+        # Pantry and canned goods
+        Deal(store_lookup["Food Basics Major Mack"], "Canned Black Beans 540ml", 1.29, 1.79),
+        Deal(store_lookup["FreshCo Elgin Mills"], "Canned Chickpeas 540ml", 1.49, 1.99),
+        Deal(store_lookup["No Frills Yonge & 16th"], "Tomato Pasta Sauce 680ml", 2.49, 3.49),
+        Deal(store_lookup["Walmart Supercentre RH"], "Peanut Butter Smooth 1kg", 5.97, 7.47),
+        Deal(store_lookup["Metro Bathurst & Major Mack"], "Extra Virgin Olive Oil 1L", 9.99, 12.99),
+        Deal(store_lookup["Food Basics Major Mack"], "Ketchup 750ml", 2.49, 3.49),
+        Deal(store_lookup["FreshCo Elgin Mills"], "Chicken Noodle Soup 540ml", 1.49, 1.99),
+
+        # Fruit and vegetables
+        Deal(store_lookup["No Frills Yonge & 16th"], "Bananas 1kg", 1.29, 1.79),
+        Deal(store_lookup["FreshCo Elgin Mills"], "Navel Oranges 3lb Bag", 3.99, 5.49),
+        Deal(store_lookup["Food Basics Major Mack"], "Blueberries 170g", 2.49, 3.99),
+        Deal(store_lookup["Metro Bathurst & Major Mack"], "Avocados 5 Pack", 4.99, 6.99),
+        Deal(store_lookup["Walmart Supercentre RH"], "Russet Potatoes 10lb Bag", 4.97, 6.97),
+        Deal(store_lookup["No Frills Yonge & 16th"], "Yellow Onions 3lb Bag", 2.49, 3.49),
+        Deal(store_lookup["FreshCo Elgin Mills"], "Romaine Hearts 3 Pack", 3.49, 4.49),
+        Deal(store_lookup["Food Basics Major Mack"], "English Cucumber", 0.99, 1.49),
+
+        # Frozen foods and snacks
+        Deal(store_lookup["No Frills Yonge & 16th"], "Frozen Mixed Vegetables 750g", 2.99, 3.99),
+        Deal(store_lookup["FreshCo Elgin Mills"], "Frozen Green Peas 750g", 2.49, 3.49),
+        Deal(store_lookup["Food Basics Major Mack"], "Frozen French Fries 1kg", 3.49, 4.49),
+        Deal(store_lookup["Walmart Supercentre RH"], "Frozen Cheese Pizza", 4.97, 6.97),
+        Deal(store_lookup["Metro Bathurst & Major Mack"], "Vanilla Ice Cream 1.5L", 4.99, 6.99),
+        Deal(store_lookup["No Frills Yonge & 16th"], "Potato Chips 200g", 2.49, 3.49),
+        Deal(store_lookup["FreshCo Elgin Mills"], "Granola Bars 6 Pack", 2.99, 4.49),
+
+        # Coffee, tea, juice, and water
+        Deal(store_lookup["Food Basics Major Mack"], "Ground Coffee 340g", 6.99, 9.99),
+        Deal(store_lookup["No Frills Yonge & 16th"], "Black Tea 72 Count", 3.99, 5.49),
+        Deal(store_lookup["FreshCo Elgin Mills"], "Orange Juice 2.5L", 4.49, 5.99),
+        Deal(store_lookup["Walmart Supercentre RH"], "Apple Juice 2.63L", 3.97, 4.97),
+        Deal(store_lookup["Metro Bathurst & Major Mack"], "Sparkling Water 12 Pack", 4.99, 6.99),
+
+        # Household essentials
+        Deal(store_lookup["No Frills Yonge & 16th"], "Paper Towels 6 Rolls", 8.99, 11.99),
+        Deal(store_lookup["FreshCo Elgin Mills"], "Toilet Paper 12 Rolls", 7.99, 10.99),
+        Deal(store_lookup["Food Basics Major Mack"], "Dish Soap 828ml", 2.49, 3.49),
+        Deal(store_lookup["Walmart Supercentre RH"], "Laundry Detergent 2.95L", 9.97, 12.97),
+        Deal(store_lookup["Metro Bathurst & Major Mack"], "Garbage Bags 40 Count", 5.99, 7.99),
+    ])
     return deals

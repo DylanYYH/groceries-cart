@@ -101,6 +101,31 @@ PRODUCT_FAMILIES = {
         "keywords": {"rice", "pasta", "bread", "oats", "cereal", "tortilla", "tortillas"},
         "related": {"protein"},
     },
+    "pantry": {
+        "keywords": {
+            "beans", "lentils", "chickpeas", "tomato sauce", "soup", "canned",
+            "flour", "sugar", "oil", "vinegar", "peanut butter", "jam",
+        },
+        "related": {"grains", "vegetables"},
+    },
+    "beverages": {
+        "keywords": {
+            "coffee", "tea", "juice", "water", "soda", "sparkling water",
+            "orange juice", "apple juice",
+        },
+        "related": {"fruits", "dairy"},
+    },
+    "frozen": {
+        "keywords": {"frozen", "pizza", "fries", "ice cream", "peas", "corn"},
+        "related": {"vegetables", "grains", "dairy"},
+    },
+    "household": {
+        "keywords": {
+            "paper towel", "toilet paper", "tissue", "detergent", "dish soap",
+            "garbage bags", "foil", "plastic wrap",
+        },
+        "related": set(),
+    },
 }
 
 SIZE_TOKENS = {
@@ -124,13 +149,35 @@ SIZE_TOKENS = {
     "pcs",
 }
 
+TOKEN_ALIASES = {
+    "eggs": "egg",
+    "apples": "apple",
+    "bananas": "banana",
+    "oranges": "orange",
+    "berries": "berry",
+    "carrots": "carrot",
+    "peppers": "pepper",
+    "potatoes": "potato",
+    "tomatoes": "tomato",
+    "onions": "onion",
+    "mushrooms": "mushroom",
+    "tortillas": "tortilla",
+    "beans": "bean",
+    "towels": "towel",
+    "rolls": "roll",
+}
+
 
 def _normalize_text(text: str) -> str:
     return re.sub(r"[^a-z0-9\s%]+", " ", text.lower()).strip()
 
 
 def _tokenize(text: str) -> set[str]:
-    return {token for token in _normalize_text(text).split() if token}
+    return {
+        TOKEN_ALIASES.get(token, token)
+        for token in _normalize_text(text).split()
+        if token
+    }
 
 
 def _size_signature(text: str) -> set[str]:
@@ -262,6 +309,11 @@ def classify_match(query: str, product_name: str) -> tuple[str, str, float]:
     if not q_norm or not p_norm:
         return "Irrelevant", "No useful comparison available.", 0.0
 
+    # Some compound products contain the query word but are not substitutes
+    # for the standalone item.
+    if q_norm == "butter" and "peanut butter" in p_norm:
+        return "Irrelevant", "Peanut butter is not a substitute for dairy butter.", 0.0
+
     if q_norm == p_norm:
         return _match_exact(query, product_name)
 
@@ -279,13 +331,18 @@ def classify_match(query: str, product_name: str) -> tuple[str, str, float]:
             return _match_size_variation(query, product_name)
         if overlap >= 0.75 or char_ratio >= 0.72:
             return _match_direct(query, product_name, q_tokens, p_tokens)
-        if q_family == "dairy":
-            if overlap >= 0.25:
-                return _match_category(q_family, q_tokens, p_tokens)
-            return "Irrelevant", "Same aisle, but not a usable dairy substitute.", 0.0
+        if q_family == "household" and overlap < 0.75:
+            return "Irrelevant", "A different household item, not a useful substitute.", 0.0
+        if q_family in {"dairy", "dairy_alternatives", "beverages", "grains", "pantry", "frozen"} and overlap < 0.25:
+            return "Irrelevant", "Same broad aisle, but not a useful substitute.", 0.0
         return _match_category(q_family, q_tokens, p_tokens)
 
-    if family_affinity(q_family, p_family) > 0:
+    # Dairy alternatives are useful substitutes for a milk query, but they
+    # should never be returned for narrower dairy searches such as egg, cheese,
+    # yogurt, or butter.
+    if q_family == "dairy" and p_family == "dairy_alternatives" and "milk" not in q_tokens:
+        return "Irrelevant", "A different dairy product, not a useful substitute.", 0.0
+    if family_affinity(q_family, p_family) > 0 and overlap >= 0.25:
         return _match_distant(q_family, p_family)
 
     if overlap >= 0.65:
@@ -362,6 +419,14 @@ def rank_deals_with_fallback(
     direct = rank_deals(query, deals, config, max_distance_km=max_distance_km)
     if direct:
         return query, direct
+
+    # A known grocery family is already specific enough.  Broadening queries
+    # such as "egg" into "egg milk butter" makes unrelated dairy items look
+    # relevant when the catalog is missing a product.  Only use the relaxed
+    # fallback for unknown terms; known families should return no result rather
+    # than misleading substitutes.
+    if infer_family(query):
+        return query, []
 
     expanded = broaden_query(query)
     if expanded != query:

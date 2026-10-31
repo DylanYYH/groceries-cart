@@ -30,6 +30,8 @@ from scoring import ScoringConfig, broaden_query, infer_family, rank_deals_with_
 HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8765"))
 SESSION_COOKIE_NAME = "brightcart_session"
+DEMO_USERNAME = "demo"
+DEMO_PASSWORD = "smartcart"
 
 SESSION_STORE: dict[str, dict[str, object]] = {}
 USER_STORE: dict[str, str] = {}
@@ -80,6 +82,11 @@ def password_matches(password: str, stored: str) -> bool:
         return hmac.compare_digest(actual, expected)
     except (ValueError, TypeError):
         return False
+
+
+# A seeded account makes the public demo easy to evaluate.  This is intentionally
+# in-memory and must not be used as real authentication or production data.
+USER_STORE.setdefault(DEMO_USERNAME, password_digest(DEMO_PASSWORD))
 
 
 def parse_cookie_value(cookie_header: str | None) -> str | None:
@@ -183,19 +190,18 @@ def build_context(query: str, session: dict[str, object]) -> dict[str, object]:
 
 
 def render_progress(active: str) -> str:
-    steps = [
-        ("auth", "1. Register / Sign in"),
-        ("search", "2. Search"),
-    ]
-    active_index = next((idx for idx, (key, _) in enumerate(steps) if key == active), 0)
-    chips = []
-    for idx, (_, label) in enumerate(steps):
-        state = "active" if idx == active_index else "done" if idx < active_index else ""
-        chips.append(f'<span class="step {state}">{escape(label)}</span>')
-    return "".join(chips)
+    label = "Ready to search" if active == "search" else "Optional account"
+    return f'<span class="step active">{escape(label)}</span>'
 
 
 def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str) -> str:
+    hero_title = "Find better grocery prices nearby." if active_step == "search" else "Find grocery deals without the fuss."
+    hero_copy = (
+        "Search an item, choose your area, and compare nearby prices in seconds. "
+        "You can browse as a guest and use your location when you are ready."
+        if active_step == "search"
+        else "Start with a quick search, then optionally save a local demo account for the next visit."
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -302,6 +308,7 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       gap: 20px;
       align-items: start;
     }}
+    .layout > aside {{ position: sticky; top: 18px; }}
     .panel {{
       background: var(--card);
       backdrop-filter: blur(14px);
@@ -342,6 +349,21 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       font-size: 20px;
       letter-spacing: -0.03em;
     }}
+    .demo-credentials {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 16px 0 4px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(153,226,209,0.28), rgba(255,255,255,0.92));
+      border: 1px solid rgba(85, 170, 152, 0.20);
+      color: #24564b;
+    }}
+    .demo-credentials strong, .demo-credentials span {{ display: block; }}
+    .demo-credentials span {{ margin-top: 4px; font-size: 13px; }}
+    .demo-credentials code {{ font-weight: 800; color: #1c6654; }}
     .field {{
       display: grid;
       gap: 8px;
@@ -362,6 +384,10 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       outline: none;
       color: var(--text);
       background: rgba(255,255,255,0.94);
+    }}
+    .field input:focus, .field select:focus {{
+      border-color: var(--primary-2);
+      box-shadow: 0 0 0 4px rgba(111, 176, 218, 0.18);
     }}
     .field input::placeholder {{
       color: #88a0b1;
@@ -393,6 +419,13 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       color: var(--primary);
       background: rgba(53, 107, 154, 0.08);
     }}
+    .btn:hover {{ transform: translateY(-1px); filter: brightness(1.02); }}
+    .btn:focus-visible, a:focus-visible {{ outline: 3px solid rgba(111,176,218,0.55); outline-offset: 3px; }}
+    .quick-searches {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }}
+    .quick-searches span {{ color: var(--muted); font-size: 13px; font-weight: 700; margin-right: 2px; }}
+    .quick-searches a {{ padding: 8px 11px; border-radius: 999px; color: var(--primary); background: rgba(53,107,154,0.08); text-decoration: none; font-size: 13px; font-weight: 800; }}
+    .quick-searches a:hover {{ background: rgba(153,226,209,0.35); }}
+    .guest-note {{ padding: 12px 14px; border-radius: 16px; background: var(--accent-2); color: #24564b; font-size: 13px; line-height: 1.5; }}
     .notice {{
       margin: 0 0 16px;
       padding: 14px 16px;
@@ -535,6 +568,8 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       background: linear-gradient(180deg, rgba(155,231,212,0.16), rgba(255,255,255,0.92));
       border: 1px solid rgba(85, 170, 152, 0.14);
     }}
+    .score-breakdown summary {{ cursor: pointer; color: #1f6957; font-weight: 800; font-size: 13px; }}
+    .score-breakdown[open] summary {{ margin-bottom: 12px; }}
     .score-grid {{
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -647,6 +682,10 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
         flex-direction: column;
         align-items: start;
       }}
+      .layout > aside {{ position: static; }}
+      .wrap {{ padding: 16px 12px 32px; }}
+      .hero, .panel {{ padding: 18px; border-radius: 22px; }}
+      .demo-credentials {{ align-items: flex-start; flex-direction: column; }}
     }}
   </style>
 </head>
@@ -654,12 +693,8 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
   <div class="wrap">
     <section class="hero">
       <div class="eyebrow">BrightCart Richmond Hill + GTA</div>
-      <h1>Sign in first, then search the best grocery deal nearby.</h1>
-      <p>
-        The flow starts with account access, then lets you search grocery items
-        right away. You can still adjust your location and search radius from the
-        search page if you want tighter ranking.
-      </p>
+      <h1>{escape(hero_title)}</h1>
+      <p>{escape(hero_copy)}</p>
       <div class="steps">
         {render_progress(active_step)}
       </div>
@@ -697,6 +732,16 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       }}, {{ enableHighAccuracy: false, maximumAge: 300000, timeout: 10000 }});
     }}
 
+    function fillDemoCredentials() {{
+      const username = document.getElementById("signin_email");
+      const password = document.getElementById("signin_password");
+      if (username && password) {{
+        username.value = "demo";
+        password.value = "smartcart";
+        username.focus();
+      }}
+    }}
+
     const mapData = window.BRIGHTCART_MAP_DATA;
     if (mapData && document.getElementById("store-map")) {{
       const script = document.createElement("script");
@@ -722,6 +767,13 @@ def render_auth_main(error: str | None = None) -> str:
       <h2>Register or sign in</h2>
       <p class="sub">Use your email and password to create a local account or return to an existing one.</p>
       {error_html}
+      <div class="demo-credentials">
+        <div>
+          <strong>Demo account</strong>
+          <span>Username: <code>demo</code> &nbsp; Password: <code>smartcart</code></span>
+        </div>
+        <button class="btn btn-secondary" type="button" onclick="fillDemoCredentials()">Fill demo credentials</button>
+      </div>
       <div class="auth-grid">
         <form method="post" action="/register" class="auth-card">
           <h3>Create account</h3>
@@ -740,8 +792,8 @@ def render_auth_main(error: str | None = None) -> str:
         <form method="post" action="/signin" class="auth-card">
           <h3>Sign in</h3>
           <div class="field">
-            <label for="signin_email">Email address</label>
-            <input id="signin_email" name="email" type="email" placeholder="name@example.com" required />
+            <label for="signin_email">Username or email</label>
+            <input id="signin_email" name="email" type="text" placeholder="demo or name@example.com" required />
           </div>
           <div class="field">
             <label for="signin_password">Password</label>
@@ -803,11 +855,17 @@ def render_search_controls(session: dict[str, object], error: str | None = None)
 
 
 def render_search_sidebar(session: dict[str, object]) -> str:
+    account_html = (
+        f'<strong>Signed in as</strong><p>{escape(session.get("email", ""))}</p>'
+        if session.get("authenticated")
+        else '<strong>Browsing as a guest</strong><p>No account needed to search or compare deals.</p>'
+    )
+    guest_html = "" if session.get("authenticated") else '<div class="guest-note">You can search freely. <a href="/auth">Create an account</a> only if you want to try the demo sign-in flow.</div>'
     return f"""
       <div class="summary-card">
-        <strong>Signed in as</strong>
-        <p>{escape(session.get("email", "unknown"))}</p>
+        {account_html}
       </div>
+      {guest_html}
       {render_search_controls(session)}
     """
 
@@ -863,7 +921,8 @@ def render_result_card(result) -> str:
             <strong>{escape(result.match_note)}</strong>
           </div>
         </div>
-        <div class="score-breakdown">
+        <details class="score-breakdown">
+          <summary>Why this result?</summary>
           <div class="score-grid">
             <div class="score-cell">
               <span>Discount Score</span>
@@ -883,7 +942,7 @@ def render_result_card(result) -> str:
             {escape(component_formula(result))}<br />
             Final score: <strong>{result.total_score:.1f}/100</strong>
           </p>
-        </div>
+        </details>
       </article>
     """
 
@@ -934,13 +993,20 @@ def render_search_main(session: dict[str, object], context: dict[str, object], q
       </p>
       <form method="get" action="/search">
         <div class="field">
-          <label for="q">Item query</label>
-          <input id="q" name="q" type="text" value="{query_value}" placeholder="butter, 2% milk, chicken breast" />
+          <label for="q">What are you looking for?</label>
+          <input id="q" name="q" type="search" value="{query_value}" placeholder="Try eggs, milk, coffee, or chicken" autofocus />
         </div>
         <div class="actions">
-          <button class="btn btn-primary" type="submit">Find deals</button>
+          <button class="btn btn-primary" type="submit">Compare prices</button>
         </div>
       </form>
+      <div class="quick-searches" aria-label="Popular searches">
+        <span>Popular:</span>
+        <a href="/search?q=eggs">Eggs</a>
+        <a href="/search?q=milk">Milk</a>
+        <a href="/search?q=coffee">Coffee</a>
+        <a href="/search?q=chicken">Chicken</a>
+      </div>
       {fallback_notice}
       <div class="stats">
         <div class="stat">
@@ -1000,10 +1066,6 @@ class GroceryHandler(BaseHTTPRequestHandler):
             send_html(self, '{"status":"ok"}', status=200)
             return
         if parsed.path in {"", "/"}:
-            session_id, session = get_session(self)
-            if not session or not session.get("authenticated"):
-                redirect(self, "/auth")
-                return
             redirect(self, "/search")
             return
 
@@ -1016,13 +1078,14 @@ class GroceryHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/search":
-            if not session or not session.get("authenticated"):
-                redirect(self, "/auth")
-                return
+            if not session:
+                session_id, session = ensure_session(self)
+            else:
+                session_id = session_id
             params = parse_qs(parsed.query)
             query = params.get("q", [session.get("last_query", "butter")])[0].strip() or "butter"
             session["last_query"] = query
-            send_html(self, render_search_page(session, query))
+            send_html(self, render_search_page(session, query), cookie_value=session_id)
             return
 
         send_html(self, render_register_page("Unknown page. Use /auth or /search."), status=404)
@@ -1069,10 +1132,6 @@ class GroceryHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/location":
-            if not session.get("authenticated"):
-                send_html(self, render_register_page("Please register or sign in first."))
-                return
-
             location_text = form.get("location", "").strip()
             proximity_key = form.get("proximity", "nearby").strip()
             if not location_text:
