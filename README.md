@@ -20,8 +20,11 @@ recommended host. Create a new Web Service from this repository, or use the
 included `render.yaml`. Render will use the included build, start, and health
 check settings. The free service may sleep after inactivity.
 
-User accounts and sessions are still in-memory demo data and reset whenever the
-service restarts; do not use this authentication flow for real users.
+The sign-in page pre-fills the demo account (`demo` / `smartcart`). New test
+accounts are stored as salted password hashes in `users.json`. On Render, the
+Blueprint mounts a small persistent disk at `/var/data` and stores the file at
+`/var/data/users.json`, so registered test users survive deploys and restarts.
+Sessions remain in memory, so users must sign in again after a restart.
 
 ## Location map
 
@@ -39,9 +42,10 @@ Vercel while this Python service remains on Render.
 
 ## Flow
 
-1. Register with email and password or sign in to an existing account.
+1. Sign in with the prefilled demo account or open the registration page.
 2. Search an item such as `butter`, `milk`, or `chicken breast`.
 3. Optionally update your current location and proximity radius from the search page.
+4. Use the account panel on the search page to see the current user or log out.
 
 ## Ranking model
 

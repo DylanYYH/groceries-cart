@@ -10,3 +10,9 @@ services:
         value: production
       - key: HOST
         value: 0.0.0.0
+      - key: USER_STORE_PATH
+        value: /var/data/users.json
+    disk:
+      name: groceryscout-data
+      mountPath: /var/data
+      sizeGB: 1

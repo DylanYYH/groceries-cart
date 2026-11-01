@@ -17,6 +17,8 @@ import hashlib
 import hmac
 import json
 import os
+from pathlib import Path
+import threading
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -34,9 +36,11 @@ PORT = int(os.environ.get("PORT", "8765"))
 SESSION_COOKIE_NAME = "groceryscout_session"
 DEMO_USERNAME = "demo"
 DEMO_PASSWORD = "smartcart"
+USER_STORE_PATH = Path(os.environ.get("USER_STORE_PATH", "users.json"))
 
 SESSION_STORE: dict[str, dict[str, object]] = {}
 USER_STORE: dict[str, str] = {}
+USER_STORE_LOCK = threading.Lock()
 
 PROXIMITY_OPTIONS = {
     "close": {
@@ -86,9 +90,40 @@ def password_matches(password: str, stored: str) -> bool:
         return False
 
 
-# A seeded account makes the public demo easy to evaluate.  This is intentionally
-# in-memory and must not be used as real authentication or production data.
-USER_STORE.setdefault(DEMO_USERNAME, password_digest(DEMO_PASSWORD))
+def load_user_store() -> dict[str, str]:
+    try:
+        raw = json.loads(USER_STORE_PATH.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            return {str(key): str(value) for key, value in raw.items()}
+    except (OSError, ValueError, TypeError):
+        pass
+    return {}
+
+
+def save_user_store() -> None:
+    payload = json.dumps(USER_STORE, indent=2, sort_keys=True)
+    temporary_path = USER_STORE_PATH.with_name(f"{USER_STORE_PATH.name}.tmp")
+    try:
+        USER_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path.write_text(payload, encoding="utf-8")
+        os.replace(temporary_path, USER_STORE_PATH)
+    except OSError:
+        try:
+            temporary_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+USER_STORE.update(load_user_store())
+# A seeded account makes the public demo easy to evaluate. Passwords are stored
+# as salted hashes; this local JSON store is intentionally for limited testing.
+if DEMO_USERNAME not in USER_STORE:
+    USER_STORE[DEMO_USERNAME] = password_digest(DEMO_PASSWORD)
+    save_user_store()
+
+
+def normalize_login(value: str) -> str:
+    return value.strip().lower()
 
 
 def parse_cookie_value(cookie_header: str | None) -> str | None:
@@ -161,6 +196,14 @@ def redirect(handler: BaseHTTPRequestHandler, location: str, cookie_value: str |
     handler.end_headers()
 
 
+def logout_redirect(handler: BaseHTTPRequestHandler) -> None:
+    handler.send_response(303)
+    secure = "; Secure" if os.environ.get("APP_ENV") == "production" else ""
+    handler.send_header("Set-Cookie", f"{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure}")
+    handler.send_header("Location", "/auth")
+    handler.end_headers()
+
+
 def proximity_summary(key: str) -> dict[str, object]:
     return PROXIMITY_OPTIONS.get(key, PROXIMITY_OPTIONS["nearby"])
 
@@ -195,13 +238,47 @@ def render_progress(active: str) -> str:
     return ""
 
 
+def render_brand_mark() -> str:
+    return """
+      <div class="auth-brand">
+        <div class="hero-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 14H17L22 40H50L56 22H20" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="27" cy="51" r="4" fill="currentColor"/>
+            <circle cx="47" cy="51" r="4" fill="currentColor"/>
+            <path d="M29 30H48" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="app-name">Grocery Scout</div>
+      </div>
+    """
+
+
 def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str) -> str:
     hero_title = "Compare grocery prices near you."
     hero_copy = "Search an item and see nearby store prices, distances, and savings in one place."
     sidebar_block = f'<aside class="panel">{sidebar_html}</aside>' if sidebar_html.strip() else ""
-    layout_class = "layout single" if not sidebar_html.strip() else "layout"
+    layout_class = "layout single auth-layout" if active_step == "auth" else ("layout single" if not sidebar_html.strip() else "layout")
     hero_class = "hero compact" if not sidebar_html.strip() else "hero"
     progress_html = render_progress(active_step)
+    hero_block = "" if active_step == "auth" else f"""
+    <section class="{hero_class}">
+      <div class="app-name">Grocery Scout</div>
+      <div class="hero-heading">
+        <div class="hero-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 14H17L22 40H50L56 22H20" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="27" cy="51" r="4" fill="currentColor"/>
+            <circle cx="47" cy="51" r="4" fill="currentColor"/>
+            <path d="M29 30H48" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h1>{escape(hero_title)}</h1>
+      </div>
+      <p>{escape(hero_copy)}</p>
+      {f'<div class="steps">{progress_html}</div>' if progress_html else ''}
+    </section>
+    """
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -281,6 +358,9 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
     .hero-mark svg {{ width: 30px; height: 30px; }}
     .hero-heading {{ display: flex; align-items: center; gap: 16px; }}
     .hero-heading h1 {{ margin: 0; max-width: none; }}
+    .auth-brand {{ text-align: center; margin-bottom: 18px; }}
+    .auth-brand .hero-mark {{ margin: 0 auto 10px; }}
+    .auth-brand .app-name {{ margin: 0; }}
     .app-name {{
       margin: 0 0 10px;
       color: var(--primary);
@@ -356,6 +436,7 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
     }}
     .layout > aside {{ position: sticky; top: 18px; }}
     .layout.single {{ grid-template-columns: minmax(0, 1fr); max-width: 980px; margin: 0 auto; }}
+    .layout.auth-layout {{ max-width: 620px; }}
     .panel {{
       background: var(--card);
       backdrop-filter: blur(14px);
@@ -391,6 +472,11 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(240,248,255,0.94));
       border: 1px solid rgba(104, 149, 189, 0.14);
     }}
+    .auth-card-single {{ max-width: 520px; margin: 0 auto; }}
+    .form-hint, .auth-switch {{ color: var(--muted); font-size: 14px; text-align: center; }}
+    .form-hint {{ margin: 14px 0 0; }}
+    .auth-switch {{ margin: 18px 0 0; }}
+    .auth-switch a {{ color: var(--primary); font-weight: 800; }}
     .auth-card h3 {{
       margin: 0 0 12px;
       font-size: 20px;
@@ -723,6 +809,15 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
       color: var(--muted);
       line-height: 1.5;
     }}
+    .logout-link {{
+      display: inline-block;
+      margin-top: 10px;
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 800;
+      text-decoration: none;
+    }}
+    .logout-link:hover {{ text-decoration: underline; }}
     @media (max-width: 900px) {{
       .layout, .stats, .score-grid, .field-grid, .meta {{
         grid-template-columns: 1fr;
@@ -740,22 +835,7 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
 </head>
 <body>
   <div class="wrap">
-    <section class="{hero_class}">
-      <div class="app-name">Grocery Scout</div>
-      <div class="hero-heading">
-        <div class="hero-mark" aria-hidden="true">
-          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 14H17L22 40H50L56 22H20" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="27" cy="51" r="4" fill="currentColor"/>
-            <circle cx="47" cy="51" r="4" fill="currentColor"/>
-            <path d="M29 30H48" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <h1>{escape(hero_title)}</h1>
-      </div>
-      <p>{escape(hero_copy)}</p>
-      {f'<div class="steps">{progress_html}</div>' if progress_html else ''}
-    </section>
+    {hero_block}
     <div class="{layout_class}">
       <section class="panel">
         {main_html}
@@ -819,45 +899,47 @@ def render_shell(title: str, active_step: str, main_html: str, sidebar_html: str
 def render_auth_main(error: str | None = None) -> str:
     error_html = f'<div class="error">{escape(error)}</div>' if error else ""
     return f"""
-      <h2>Register or sign in</h2>
+      {render_brand_mark()}
+      <h2>Sign in</h2>
       {error_html}
-      <div class="auth-grid">
-        <form method="post" action="/register" class="auth-card">
-          <h3>Create account</h3>
-          <div class="field">
-            <label for="register_email">Email address</label>
-            <input id="register_email" name="email" type="email" placeholder="name@example.com" required />
-          </div>
-          <div class="field">
-            <label for="register_password">Password</label>
-            <input id="register_password" name="password" type="password" placeholder="Create a password" required />
-          </div>
-          <div class="actions">
-            <button class="btn btn-primary" type="submit">Register</button>
-          </div>
-        </form>
-        <form method="post" action="/signin" class="auth-card">
-          <h3>Sign in</h3>
-          <div class="field">
-            <label for="signin_email">Username or email</label>
-            <input id="signin_email" name="email" type="text" placeholder="demo or name@example.com" required />
-          </div>
-          <div class="field">
-            <label for="signin_password">Password</label>
-            <input id="signin_password" name="password" type="password" placeholder="Your password" required />
-          </div>
-          <div class="actions">
-            <button class="btn btn-primary" type="submit">Sign in</button>
-          </div>
-          <div class="demo-credentials demo-inline">
-            <div>
-              <strong>Demo account</strong>
-              <span>Username: <code>demo</code> &nbsp; Password: <code>smartcart</code></span>
-            </div>
-            <button class="btn btn-secondary" type="button" onclick="fillDemoCredentials()">Fill credentials</button>
-          </div>
-        </form>
-      </div>
+      <form method="post" action="/signin" class="auth-card auth-card-single">
+        <div class="field">
+          <label for="signin_email">Username or email</label>
+          <input id="signin_email" name="email" type="text" value="demo" placeholder="demo or name@example.com" required />
+        </div>
+        <div class="field">
+          <label for="signin_password">Password</label>
+          <input id="signin_password" name="password" type="password" value="smartcart" placeholder="Your password" required />
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">Sign in</button>
+        </div>
+        <p class="form-hint">Demo credentials are prefilled.</p>
+      </form>
+      <p class="auth-switch">New here? <a href="/register">Create an account</a></p>
+    """
+
+
+def render_register_main(error: str | None = None) -> str:
+    error_html = f'<div class="error">{escape(error)}</div>' if error else ""
+    return f"""
+      {render_brand_mark()}
+      <h2>Create account</h2>
+      {error_html}
+      <form method="post" action="/register" class="auth-card auth-card-single">
+        <div class="field">
+          <label for="register_email">Username or email</label>
+          <input id="register_email" name="email" type="text" placeholder="name@example.com" required />
+        </div>
+        <div class="field">
+          <label for="register_password">Password</label>
+          <input id="register_password" name="password" type="password" placeholder="At least 6 characters" minlength="6" required />
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">Create account</button>
+        </div>
+      </form>
+      <p class="auth-switch">Already have an account? <a href="/auth">Sign in</a></p>
     """
 
 
@@ -1072,10 +1154,12 @@ def render_search_main(session: dict[str, object], context: dict[str, object], q
       </div>
     """
 
+    account_name = escape(session.get("email", ""))
     sidebar_html = f"""
       <div class="summary-card">
         <strong>Signed in as</strong>
-        <p>{escape(session.get("email", ""))}</p>
+        <p>{account_name}</p>
+        <a class="logout-link" href="/logout">Log out</a>
       </div>
       {render_search_controls(session)}
       <h2 style="margin-top:20px;">Closest stores</h2>
@@ -1092,8 +1176,12 @@ def render_search_main(session: dict[str, object], context: dict[str, object], q
     return render_shell("Grocery Scout | Grocery deal finder", "search", main_html, sidebar_html)
 
 
+def render_auth_page(error: str | None = None) -> str:
+    return render_shell("Grocery Scout | Sign in", "auth", render_auth_main(error), render_auth_sidebar())
+
+
 def render_register_page(error: str | None = None) -> str:
-    return render_shell("Grocery Scout | Register or sign in", "auth", render_auth_main(error), render_auth_sidebar())
+    return render_shell("Grocery Scout | Create account", "auth", render_register_main(error), render_auth_sidebar())
 
 
 def render_search_page(session: dict[str, object], query: str) -> str:
@@ -1112,25 +1200,34 @@ class GroceryHandler(BaseHTTPRequestHandler):
             return
 
         session_id, session = get_session(self)
+        if parsed.path == "/logout":
+            if session_id:
+                SESSION_STORE.pop(session_id, None)
+            logout_redirect(self)
+            return
+
         if parsed.path == "/auth":
             if session and session.get("authenticated"):
                 redirect(self, "/search")
                 return
+            send_html(self, render_auth_page())
+            return
+
+        if parsed.path == "/register":
             send_html(self, render_register_page())
             return
 
         if parsed.path == "/search":
-            if not session:
-                session_id, session = ensure_session(self)
-            else:
-                session_id = session_id
+            if not session or not session.get("authenticated"):
+                redirect(self, "/auth")
+                return
             params = parse_qs(parsed.query)
             query = params.get("q", [session.get("last_query", "butter")])[0].strip() or "butter"
             session["last_query"] = query
             send_html(self, render_search_page(session, query), cookie_value=session_id)
             return
 
-        send_html(self, render_register_page("Unknown page. Use /auth or /search."), status=404)
+        send_html(self, render_auth_page("Unknown page. Use /auth or /register."), status=404)
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
@@ -1138,34 +1235,46 @@ class GroceryHandler(BaseHTTPRequestHandler):
 
         session_id, session = ensure_session(self)
         if parsed.path == "/register":
-            email = form.get("email", "").strip()
+            email = normalize_login(form.get("email", ""))
             password = form.get("password", "").strip()
             if not email or not password:
-                send_html(self, render_register_page("Email and password are required."))
+                send_html(self, render_register_page("Username and password are required."))
                 return
-            if email in USER_STORE:
+            if len(email) < 3 or len(email) > 120:
+                send_html(self, render_register_page("Use a username or email between 3 and 120 characters."))
+                return
+            if len(password) < 6:
+                send_html(self, render_register_page("Password must be at least 6 characters."))
+                return
+            with USER_STORE_LOCK:
+                if email in USER_STORE:
+                    existing = True
+                else:
+                    USER_STORE[email] = password_digest(password)
+                    save_user_store()
+                    existing = False
+            if existing:
                 send_html(self, render_register_page("That email already exists. Use sign in instead."))
                 return
 
-            USER_STORE[email] = password_digest(password)
             session["authenticated"] = True
             session["email"] = email
             redirect(self, "/search", cookie_value=session_id)
             return
 
         if parsed.path == "/signin":
-            email = form.get("email", "").strip()
+            email = normalize_login(form.get("email", ""))
             password = form.get("password", "").strip()
             if not email or not password:
-                send_html(self, render_register_page("Email and password are required."))
+                send_html(self, render_auth_page("Username and password are required."))
                 return
 
             stored_password = USER_STORE.get(email)
             if stored_password is None:
-                send_html(self, render_register_page("No account found for that email."))
+                send_html(self, render_auth_page("No account found for that username or email."))
                 return
             if not password_matches(password, stored_password):
-                send_html(self, render_register_page("Incorrect password."))
+                send_html(self, render_auth_page("Incorrect password."))
                 return
 
             session["authenticated"] = True
@@ -1174,6 +1283,9 @@ class GroceryHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/location":
+            if not session.get("authenticated"):
+                redirect(self, "/auth")
+                return
             location_text = form.get("location", "").strip()
             proximity_key = form.get("proximity", "nearby").strip()
             if not location_text:
@@ -1200,7 +1312,7 @@ class GroceryHandler(BaseHTTPRequestHandler):
             redirect(self, "/search", cookie_value=session_id)
             return
 
-        send_html(self, render_register_page("Unsupported form submission."), status=404)
+        send_html(self, render_auth_page("Unsupported form submission."), status=404)
 
     def log_message(self, format, *args):  # noqa: A003
         return
