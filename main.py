@@ -1207,9 +1207,10 @@ class GroceryHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/auth":
-            if session and session.get("authenticated"):
-                redirect(self, "/search")
-                return
+            # Always render the sign-in form, even when a session is already
+            # authenticated.  The registration page links back here, and the
+            # user should see the prefilled demo credentials instead of being
+            # redirected straight to the search page.
             send_html(self, render_auth_page())
             return
 
